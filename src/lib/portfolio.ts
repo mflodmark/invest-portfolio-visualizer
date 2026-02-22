@@ -70,22 +70,26 @@ export async function getPortfolioFromDatabase(userId: string): Promise<{
 
   const rows = (data || []) as DbHoldingRow[];
   const holdings = normalizeHoldings(
-    rows.map((row) => ({
-      ...(applyOverride(
-        {
-          symbol: row.symbol,
-          logoUrl: row.logo_url || getBranding(row.symbol).logoUrl,
-          brandColor: row.brand_color || getBranding(row.symbol).brandColor,
-          textColor: row.text_color || getBranding(row.symbol).textColor,
-        },
-        overrides[row.symbol.toUpperCase()],
-      )),
-      symbol: row.symbol,
-      name: row.name,
-      marketValueUsd: Number(row.market_value),
-      category: row.category,
-      currency: row.currency || 'SEK',
-    })),
+    rows.map((row) => {
+      const defaults = getBranding(row.symbol);
+      return {
+        ...(applyOverride(
+          {
+            symbol: row.symbol,
+            // Local symbol SVG should be canonical. DB overrides are handled in instrument_overrides.
+            logoUrl: defaults.logoUrl,
+            brandColor: row.brand_color || defaults.brandColor,
+            textColor: row.text_color || defaults.textColor,
+          },
+          overrides[row.symbol.toUpperCase()],
+        )),
+        symbol: row.symbol,
+        name: row.name,
+        marketValueUsd: Number(row.market_value),
+        category: row.category,
+        currency: row.currency || 'SEK',
+      };
+    }),
   );
 
   const currency = rows[0]?.currency || 'SEK';

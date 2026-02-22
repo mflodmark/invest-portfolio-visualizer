@@ -13,6 +13,7 @@ const SYMBOL_ALIAS: Record<string, string> = {
   'ABB LTD': 'ABB',
   ABBLTD: 'ABB',
   GOOGLE: 'GOOGL',
+  GOOG: 'GOOGL',
 };
 
 const BRAND_BY_SYMBOL: Record<string, BrandTheme> = {
