@@ -1,0 +1,51 @@
+[
+  {
+    "symbol": "AAPL",
+    "name": "Apple",
+    "logoUrl": "https://logo.clearbit.com/apple.com",
+    "marketValueUsd": 38500,
+    "category": "stock"
+  },
+  {
+    "symbol": "MSFT",
+    "name": "Microsoft",
+    "logoUrl": "https://logo.clearbit.com/microsoft.com",
+    "marketValueUsd": 31200,
+    "category": "stock"
+  },
+  {
+    "symbol": "NVDA",
+    "name": "NVIDIA",
+    "logoUrl": "https://logo.clearbit.com/nvidia.com",
+    "marketValueUsd": 21500,
+    "category": "stock"
+  },
+  {
+    "symbol": "VOO",
+    "name": "Vanguard S&P 500 ETF",
+    "logoUrl": "https://logo.clearbit.com/vanguard.com",
+    "marketValueUsd": 18900,
+    "category": "etf"
+  },
+  {
+    "symbol": "BTC",
+    "name": "Bitcoin",
+    "logoUrl": "https://cryptologos.cc/logos/bitcoin-btc-logo.png",
+    "marketValueUsd": 12900,
+    "category": "crypto"
+  },
+  {
+    "symbol": "BND",
+    "name": "Vanguard Total Bond Market ETF",
+    "logoUrl": "https://logo.clearbit.com/vanguard.com",
+    "marketValueUsd": 7400,
+    "category": "bond"
+  },
+  {
+    "symbol": "CASH",
+    "name": "Cash Reserve",
+    "logoUrl": "https://cdn-icons-png.flaticon.com/512/2489/2489756.png",
+    "marketValueUsd": 5600,
+    "category": "cash"
+  }
+]

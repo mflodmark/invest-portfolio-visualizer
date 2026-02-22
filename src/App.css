@@ -1,0 +1,121 @@
+:root {
+  font-family: 'Space Grotesk', 'Avenir Next', sans-serif;
+  color: #0f172a;
+  background: radial-gradient(circle at top left, #f0fdfa, #fff7ed 48%, #eff6ff);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: clamp(1.8rem, 2.2vw, 2.8rem);
+}
+
+.header p {
+  margin: 0.35rem 0 0;
+}
+
+.error {
+  color: #b91c1c;
+  margin: 0;
+}
+
+.treemap {
+  position: relative;
+  min-height: 460px;
+  border-radius: 16px;
+  border: 1px solid #cbd5e1;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+}
+
+.tile {
+  position: absolute;
+  padding: 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: #f8fafc;
+}
+
+.tile::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.18), transparent 45%);
+  pointer-events: none;
+}
+
+.logo {
+  width: clamp(26px, 20%, 52px);
+  aspect-ratio: 1;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.tile-labels {
+  z-index: 1;
+  font-size: 0.92rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.symbol {
+  font-weight: 700;
+}
+
+.table-wrapper {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.table-wrapper h2 {
+  margin: 0 0 0.75rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.55rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.footer {
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .treemap {
+    min-height: 360px;
+  }
+
+  th,
+  td {
+    font-size: 0.92rem;
+  }
+}
