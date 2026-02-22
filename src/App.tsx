@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { getDemoPortfolio, getPortfolioFromDatabase, parseBrokerCsv, saveBrokerCsvToDatabase } from './lib/portfolio';
+import {
+  getDemoPortfolio,
+  getPortfolioFromDatabase,
+  parseBrokerCsv,
+  saveBrandOverride,
+  saveBrokerCsvToDatabase,
+} from './lib/portfolio';
 import { hasSupabaseConfig, supabase } from './lib/supabase';
 import { buildSliceTreemap } from './lib/treemap';
 import type { HoldingWithWeight } from './types';
@@ -21,6 +27,8 @@ function App() {
   const [error, setError] = useState<string>('');
   const [currency, setCurrency] = useState<string>('USD');
   const [sourceLabel, setSourceLabel] = useState<string>('Demo data');
+  const [editorOpen, setEditorOpen] = useState<boolean>(false);
+  const [brandDrafts, setBrandDrafts] = useState<Record<string, { logoUrl: string; brandColor: string; textColor: string }>>({});
 
   useEffect(() => {
     if (!hasSupabaseConfig || !supabase) {
@@ -76,6 +84,21 @@ function App() {
 
   const total = useMemo(() => holdings.reduce((sum, item) => sum + item.marketValueUsd, 0), [holdings]);
 
+  useEffect(() => {
+    setBrandDrafts((previous) => {
+      const next: Record<string, { logoUrl: string; brandColor: string; textColor: string }> = {};
+      holdings.forEach((holding) => {
+        const existing = previous[holding.symbol];
+        next[holding.symbol] = {
+          logoUrl: existing?.logoUrl || holding.logoUrl,
+          brandColor: existing?.brandColor || holding.brandColor || '#0f172a',
+          textColor: existing?.textColor || holding.textColor || '#f8fafc',
+        };
+      });
+      return next;
+    });
+  }, [holdings]);
+
   if (authLoading) {
     return <main className="page"><p>Loading authentication...</p></main>;
   }
@@ -117,6 +140,15 @@ function App() {
           }}
         />
         <span className="source">{sourceLabel}</span>
+        <button
+          type="button"
+          className="ghost-button"
+          onClick={() => {
+            setEditorOpen((value) => !value);
+          }}
+        >
+          {editorOpen ? 'Hide Brand Editor' : 'Open Brand Editor'}
+        </button>
         {hasSupabaseConfig && supabase ? (
           <button
             type="button"
@@ -132,6 +164,82 @@ function App() {
 
       {error ? <p className="error">{error}</p> : null}
       {isLoadingHoldings ? <p>Loading holdings...</p> : null}
+
+      {editorOpen ? (
+        <section className="editor-panel">
+          <h2>Brand Editor</h2>
+          <p>Edit logo URL and brand colors per symbol. Saved to your account when logged in.</p>
+          {holdings.length === 0 ? <p>No holdings loaded.</p> : null}
+          {holdings.map((holding) => {
+            const draft = brandDrafts[holding.symbol];
+            if (!draft) {
+              return null;
+            }
+
+            return (
+              <div key={`brand-${holding.symbol}`} className="editor-row">
+                <strong>{holding.symbol}</strong>
+                <input
+                  type="url"
+                  value={draft.logoUrl}
+                  placeholder="Logo URL"
+                  onChange={(event) => {
+                    setBrandDrafts((previous) => ({
+                      ...previous,
+                      [holding.symbol]: {
+                        ...previous[holding.symbol],
+                        logoUrl: event.target.value,
+                      },
+                    }));
+                  }}
+                />
+                <input
+                  type="text"
+                  value={draft.brandColor}
+                  placeholder="#RRGGBB"
+                  onChange={(event) => {
+                    setBrandDrafts((previous) => ({
+                      ...previous,
+                      [holding.symbol]: {
+                        ...previous[holding.symbol],
+                        brandColor: event.target.value,
+                      },
+                    }));
+                  }}
+                />
+                <input
+                  type="text"
+                  value={draft.textColor}
+                  placeholder="#RRGGBB"
+                  onChange={(event) => {
+                    setBrandDrafts((previous) => ({
+                      ...previous,
+                      [holding.symbol]: {
+                        ...previous[holding.symbol],
+                        textColor: event.target.value,
+                      },
+                    }));
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    void saveBrand(
+                      holding.symbol,
+                      session?.user?.id,
+                      brandDrafts,
+                      setHoldings,
+                      setError,
+                    );
+                  }}
+                >
+                  Save
+                </button>
+              </div>
+            );
+          })}
+        </section>
+      ) : null}
 
       <section className="treemap" aria-label="Portfolio holding treemap">
         {holdings.map((holding, index) => {
@@ -363,6 +471,57 @@ async function signUpWithPassword(
   }
 
   setMessage('Account created. Check your email for a confirmation link.');
+}
+
+async function saveBrand(
+  symbol: string,
+  userId: string | undefined,
+  drafts: Record<string, { logoUrl: string; brandColor: string; textColor: string }>,
+  setHoldings: (value: HoldingWithWeight[] | ((previous: HoldingWithWeight[]) => HoldingWithWeight[])) => void,
+  setError: (message: string) => void,
+): Promise<void> {
+  const draft = drafts[symbol];
+  if (!draft) {
+    return;
+  }
+
+  if (!isHexColor(draft.brandColor) || !isHexColor(draft.textColor)) {
+    setError(`Invalid color for ${symbol}. Use #RRGGBB.`);
+    return;
+  }
+
+  if (userId) {
+    try {
+      await saveBrandOverride(userId, {
+        symbol,
+        logoUrl: draft.logoUrl,
+        brandColor: draft.brandColor,
+        textColor: draft.textColor,
+      });
+    } catch (error) {
+      setError(error instanceof Error ? error.message : `Failed to save brand override for ${symbol}.`);
+      return;
+    }
+  }
+
+  setHoldings((previous) =>
+    previous.map((holding) =>
+      holding.symbol === symbol
+        ? {
+            ...holding,
+            logoUrl: draft.logoUrl,
+            brandColor: draft.brandColor,
+            textColor: draft.textColor,
+          }
+        : holding,
+    ),
+  );
+
+  setError('');
+}
+
+function isHexColor(value: string): boolean {
+  return /^#[0-9a-fA-F]{6}$/.test(value);
 }
 
 function formatCurrency(value: number, currencyCode: string): string {

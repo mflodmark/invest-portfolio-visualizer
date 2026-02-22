@@ -24,6 +24,20 @@ type DbHoldingRow = {
   currency: string | null;
 };
 
+type DbOverrideRow = {
+  symbol: string;
+  logo_url: string | null;
+  brand_color: string | null;
+  text_color: string | null;
+};
+
+export type BrandOverrideInput = {
+  symbol: string;
+  logoUrl: string;
+  brandColor: string;
+  textColor: string;
+};
+
 export async function getDemoPortfolio(): Promise<HoldingWithWeight[]> {
   const response = await fetch('/portfolio.json');
   if (!response.ok) {
@@ -39,6 +53,7 @@ export async function getPortfolioFromDatabase(userId: string): Promise<{
   currency: string;
 }> {
   const portfolioId = await getOrCreateDefaultPortfolio(userId);
+  const overrides = await getBrandOverrides(userId);
   if (!supabase) {
     throw new Error('Supabase client is not configured.');
   }
@@ -56,13 +71,19 @@ export async function getPortfolioFromDatabase(userId: string): Promise<{
   const rows = (data || []) as DbHoldingRow[];
   const holdings = normalizeHoldings(
     rows.map((row) => ({
+      ...(applyOverride(
+        {
+          symbol: row.symbol,
+          logoUrl: row.logo_url || getBranding(row.symbol).logoUrl,
+          brandColor: row.brand_color || getBranding(row.symbol).brandColor,
+          textColor: row.text_color || getBranding(row.symbol).textColor,
+        },
+        overrides[row.symbol.toUpperCase()],
+      )),
       symbol: row.symbol,
       name: row.name,
-      logoUrl: row.logo_url || getBranding(row.symbol).logoUrl,
       marketValueUsd: Number(row.market_value),
       category: row.category,
-      brandColor: row.brand_color || getBranding(row.symbol).brandColor,
-      textColor: row.text_color || getBranding(row.symbol).textColor,
       currency: row.currency || 'SEK',
     })),
   );
@@ -116,6 +137,28 @@ export async function saveBrokerCsvToDatabase(userId: string, csvText: string): 
   }
 
   return { holdings, currency };
+}
+
+export async function saveBrandOverride(userId: string, input: BrandOverrideInput): Promise<void> {
+  if (!supabase) {
+    throw new Error('Supabase client is not configured.');
+  }
+
+  const payload = {
+    user_id: userId,
+    symbol: input.symbol.toUpperCase(),
+    logo_url: input.logoUrl.trim(),
+    brand_color: input.brandColor.trim(),
+    text_color: input.textColor.trim(),
+  };
+
+  const { error } = await supabase
+    .from('instrument_overrides')
+    .upsert(payload, { onConflict: 'user_id,symbol' });
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 export function parseBrokerCsv(csvText: string): {
@@ -196,6 +239,46 @@ async function getOrCreateDefaultPortfolio(userId: string): Promise<string> {
   }
 
   return created.id;
+}
+
+async function getBrandOverrides(userId: string): Promise<Record<string, DbOverrideRow>> {
+  if (!supabase) {
+    throw new Error('Supabase client is not configured.');
+  }
+
+  const { data, error } = await supabase
+    .from('instrument_overrides')
+    .select('symbol,logo_url,brand_color,text_color')
+    .eq('user_id', userId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const map: Record<string, DbOverrideRow> = {};
+  ((data || []) as DbOverrideRow[]).forEach((row) => {
+    map[row.symbol.toUpperCase()] = row;
+  });
+  return map;
+}
+
+function applyOverride(
+  base: { symbol: string; logoUrl: string; brandColor: string; textColor: string },
+  override?: DbOverrideRow,
+): { logoUrl: string; brandColor: string; textColor: string } {
+  if (!override) {
+    return {
+      logoUrl: base.logoUrl,
+      brandColor: base.brandColor,
+      textColor: base.textColor,
+    };
+  }
+
+  return {
+    logoUrl: override.logo_url || base.logoUrl,
+    brandColor: override.brand_color || base.brandColor,
+    textColor: override.text_color || base.textColor,
+  };
 }
 
 function normalizeHoldings(holdings: Holding[]): HoldingWithWeight[] {

@@ -6,6 +6,7 @@ TypeScript + React app that visualizes portfolio concentration with branded logo
 
 - Treemap sized by each holding's portfolio weight
 - Brand-first tiles (logo + color + contrast text)
+- In-app Brand Editor for per-symbol logo/color overrides
 - Supabase login (email/password + Google OAuth)
 - Per-user cloud portfolio storage in Postgres (RLS protected)
 - CSV import for Avanza-style exports
@@ -52,6 +53,7 @@ The importer parses values, applies logo/brand-color defaults per symbol, comput
 
 - `portfolios`: user-owned portfolio container
 - `holdings`: normalized current positions with market value and brand presentation fields
+- `instrument_overrides`: per-user symbol overrides for logo URL and tile colors
 
 RLS policies ensure each user can access only their own rows.
 
@@ -59,4 +61,4 @@ RLS policies ensure each user can access only their own rows.
 
 Brand defaults live in `src/lib/branding.ts`.
 
-This is where you should maintain canonical logo URLs and tile colors per symbol for visual consistency.
+Use the in-app Brand Editor to override values without code changes; overrides are stored in `instrument_overrides`.
