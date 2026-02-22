@@ -1,110 +1,94 @@
 import type { Rect } from '../types';
 
-type Item = {
-  index: number;
-  area: number;
-};
-
 export function buildSliceTreemap(weights: number[], bounds: Rect): Rect[] {
-  const total = weights.reduce((sum, weight) => sum + Math.max(weight, 0), 0);
-  if (total <= 0) {
+  const sum = weights.reduce((acc, value) => acc + value, 0);
+  if (sum <= 0) {
     return weights.map(() => ({ ...bounds }));
   }
 
-  const totalArea = bounds.width * bounds.height;
-  const items: Item[] = weights
-    .map((weight, index) => ({
-      index,
-      area: (Math.max(weight, 0) / total) * totalArea,
-    }))
-    .sort((a, b) => b.area - a.area);
-
+  const normalized = weights.map((weight, index) => ({
+    index,
+    weight: Math.max(weight, 0) / sum,
+  }));
   const layout: Rect[] = Array.from({ length: weights.length }, () => ({ ...bounds }));
-  squarify(items, [], bounds, layout);
+  splitLayout(normalized, bounds, layout);
   return layout;
 }
 
-function squarify(items: Item[], row: Item[], rect: Rect, layout: Rect[]): void {
+type WeightedIndex = {
+  index: number;
+  weight: number;
+};
+
+function splitLayout(items: WeightedIndex[], rect: Rect, layout: Rect[]): void {
   if (items.length === 0) {
-    layoutRow(row, rect, layout);
     return;
   }
 
-  const next = items[0];
-  const side = Math.min(rect.width, rect.height);
-
-  if (row.length === 0 || worsensAspectRatio(row, next, side) === false) {
-    squarify(items.slice(1), [...row, next], rect, layout);
+  if (items.length === 1) {
+    layout[items[0].index] = rect;
     return;
   }
 
-  const remaining = layoutRow(row, rect, layout);
-  squarify(items, [], remaining, layout);
-}
-
-function worsensAspectRatio(row: Item[], next: Item, sideLength: number): boolean {
-  const withNext = [...row, next];
-  return score(withNext, sideLength) > score(row, sideLength);
-}
-
-function score(row: Item[], sideLength: number): number {
-  if (row.length === 0 || sideLength === 0) {
-    return Number.POSITIVE_INFINITY;
-  }
-
-  const rowArea = row.reduce((sum, item) => sum + item.area, 0);
-  const maxArea = Math.max(...row.map((item) => item.area));
-  const minArea = Math.min(...row.map((item) => item.area));
-  if (minArea === 0) {
-    return Number.POSITIVE_INFINITY;
-  }
-
-  const sideSq = sideLength * sideLength;
-  const rowAreaSq = rowArea * rowArea;
-  return Math.max((sideSq * maxArea) / rowAreaSq, rowAreaSq / (sideSq * minArea));
-}
-
-function layoutRow(row: Item[], rect: Rect, layout: Rect[]): Rect {
-  if (row.length === 0) {
-    return rect;
-  }
-
-  const rowArea = row.reduce((sum, item) => sum + item.area, 0);
-  const horizontal = rect.width >= rect.height;
-
-  if (horizontal) {
-    const rowHeight = rect.width === 0 ? 0 : rowArea / rect.width;
-    let cursorX = rect.x;
-
-    row.forEach((item, index) => {
-      const isLast = index === row.length - 1;
-      const width = isLast ? rect.x + rect.width - cursorX : rowHeight === 0 ? 0 : item.area / rowHeight;
-      layout[item.index] = { x: cursorX, y: rect.y, width, height: rowHeight };
-      cursorX += width;
+  const total = items.reduce((acc, item) => acc + item.weight, 0);
+  if (total <= 0) {
+    items.forEach((item) => {
+      layout[item.index] = rect;
     });
-
-    return {
-      x: rect.x,
-      y: rect.y + rowHeight,
-      width: rect.width,
-      height: Math.max(0, rect.height - rowHeight),
-    };
+    return;
   }
 
-  const rowWidth = rect.height === 0 ? 0 : rowArea / rect.height;
-  let cursorY = rect.y;
+  const target = total / 2;
+  let running = 0;
+  let splitAt = 1;
+  for (let i = 0; i < items.length; i += 1) {
+    running += items[i].weight;
+    if (running >= target) {
+      splitAt = i + 1;
+      break;
+    }
+  }
 
-  row.forEach((item, index) => {
-    const isLast = index === row.length - 1;
-    const height = isLast ? rect.y + rect.height - cursorY : rowWidth === 0 ? 0 : item.area / rowWidth;
-    layout[item.index] = { x: rect.x, y: cursorY, width: rowWidth, height };
-    cursorY += height;
-  });
+  const first = items.slice(0, splitAt);
+  const second = items.slice(splitAt);
+  if (second.length === 0) {
+    const head = first.slice(0, first.length - 1);
+    const tail = first.slice(first.length - 1);
+    splitLayout(head, rect, layout);
+    splitLayout(tail, rect, layout);
+    return;
+  }
 
-  return {
-    x: rect.x + rowWidth,
-    y: rect.y,
-    width: Math.max(0, rect.width - rowWidth),
-    height: rect.height,
-  };
+  const firstWeight = first.reduce((acc, item) => acc + item.weight, 0);
+  const ratio = firstWeight / total;
+  const splitHorizontally = rect.width >= rect.height;
+
+  if (splitHorizontally) {
+    const firstWidth = rect.width * ratio;
+    splitLayout(first, { x: rect.x, y: rect.y, width: firstWidth, height: rect.height }, layout);
+    splitLayout(
+      second,
+      {
+        x: rect.x + firstWidth,
+        y: rect.y,
+        width: rect.width - firstWidth,
+        height: rect.height,
+      },
+      layout,
+    );
+    return;
+  }
+
+  const firstHeight = rect.height * ratio;
+  splitLayout(first, { x: rect.x, y: rect.y, width: rect.width, height: firstHeight }, layout);
+  splitLayout(
+    second,
+    {
+      x: rect.x,
+      y: rect.y + firstHeight,
+      width: rect.width,
+      height: rect.height - firstHeight,
+    },
+    layout,
+  );
 }

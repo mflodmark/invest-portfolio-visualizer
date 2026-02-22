@@ -253,15 +253,13 @@ function App() {
             return null;
           }
 
-          const showLogo = rect.width >= 8 && rect.height >= 10;
-          const showSymbol = rect.width >= 11 && rect.height >= 8;
-          const showPercent = rect.width >= 17 && rect.height >= 12;
-          const isHero = rect.width >= 24 && rect.height >= 16;
-          const labelsClassName = showSymbol ? 'tile-labels' : 'tile-labels no-symbol';
+          const showLogo = rect.width >= 7 && rect.height >= 9;
+          const showSymbol = rect.width >= 10 && rect.height >= 7;
+          const showPercent = rect.width >= 15 && rect.height >= 11;
 
           return (
             <article
-              className={isHero ? 'tile tile-hero' : 'tile'}
+              className="tile"
               key={holding.symbol}
               style={{
                 left: `${rect.x}%`,
@@ -274,21 +272,19 @@ function App() {
               title={`${holding.name} (${holding.symbol}) ${formatPercent(holding.weight)} | ${formatCurrency(holding.marketValueUsd, currency)}`}
             >
               {showLogo ? (
-                <div className={isHero ? 'logo-badge logo-badge-hero' : 'logo-badge'}>
-                  <img
-                    src={holding.logoUrl}
-                    alt={`${holding.name} logo`}
-                    className="logo"
-                    loading="lazy"
-                    onError={(event) => {
-                      const target = event.currentTarget;
-                      target.onerror = null;
-                      target.src = getFallbackLogoUrl(holding.symbol);
-                    }}
-                  />
-                </div>
+                <img
+                  src={holding.logoUrl}
+                  alt={`${holding.name} logo`}
+                  className="logo"
+                  loading="lazy"
+                  onError={(event) => {
+                    const target = event.currentTarget;
+                    target.onerror = null;
+                    target.src = getFallbackLogoUrl(holding.symbol);
+                  }}
+                />
               ) : null}
-              <div className={labelsClassName}>
+              <div className="tile-labels">
                 {showSymbol ? <span className="symbol">{holding.symbol}</span> : null}
                 {showPercent ? <span>{formatPercent(holding.weight)}</span> : null}
               </div>
