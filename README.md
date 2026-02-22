@@ -62,3 +62,12 @@ RLS policies ensure each user can access only their own rows.
 Brand defaults live in `src/lib/branding.ts`.
 
 Use the in-app Brand Editor to override values without code changes; overrides are stored in `instrument_overrides`.
+
+### SVG logo workflow
+
+1. Add SVG files in `public/logos` named by symbol, for example:
+   - `public/logos/TSLA.svg`
+   - `public/logos/NVDA.svg`
+2. The app resolves logos with `/logos/<SYMBOL>.svg` by default.
+3. You can still override per symbol in Brand Editor (for CDN links or alternate local files).
+4. Missing/broken logos automatically fall back to a placeholder image.
