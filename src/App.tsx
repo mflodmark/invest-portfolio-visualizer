@@ -249,7 +249,9 @@ function App() {
             return null;
           }
 
-          const isCompact = rect.width < 14 || rect.height < 18;
+          const showLogo = rect.width >= 8 && rect.height >= 11;
+          const showSymbol = rect.width >= 11 && rect.height >= 8;
+          const showPercent = rect.width >= 17 && rect.height >= 12;
 
           return (
             <article
@@ -265,20 +267,24 @@ function App() {
               }}
               title={`${holding.name} (${holding.symbol}) ${formatPercent(holding.weight)} | ${formatCurrency(holding.marketValueUsd, currency)}`}
             >
-              <img
-                src={holding.logoUrl}
-                alt={`${holding.name} logo`}
-                className="logo"
-                loading="lazy"
-                onError={(event) => {
-                  const target = event.currentTarget;
-                  target.onerror = null;
-                  target.src = getFallbackLogoUrl(holding.symbol);
-                }}
-              />
+              {showLogo ? (
+                <div className="logo-badge">
+                  <img
+                    src={holding.logoUrl}
+                    alt={`${holding.name} logo`}
+                    className="logo"
+                    loading="lazy"
+                    onError={(event) => {
+                      const target = event.currentTarget;
+                      target.onerror = null;
+                      target.src = getFallbackLogoUrl(holding.symbol);
+                    }}
+                  />
+                </div>
+              ) : null}
               <div className="tile-labels">
-                <span className="symbol">{holding.symbol}</span>
-                {!isCompact ? <span>{formatPercent(holding.weight)}</span> : null}
+                {showSymbol ? <span className="symbol">{holding.symbol}</span> : <span />}
+                {showPercent ? <span>{formatPercent(holding.weight)}</span> : null}
               </div>
             </article>
           );
