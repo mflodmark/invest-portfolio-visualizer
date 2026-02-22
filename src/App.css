@@ -161,17 +161,6 @@ button {
   filter: saturate(1.08);
 }
 
-.logo {
-  width: clamp(44px, 34%, 112px);
-  aspect-ratio: 1;
-  object-fit: contain;
-  display: block;
-  border-radius: 0;
-  background: transparent;
-  z-index: 1;
-  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.24));
-}
-
 .tile-labels {
   z-index: 1;
   font-size: clamp(0.78rem, 0.9vw, 1.25rem);

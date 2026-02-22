@@ -7,7 +7,6 @@ import {
   saveBrandOverride,
   saveBrokerCsvToDatabase,
 } from './lib/portfolio';
-import { getFallbackLogoUrl } from './lib/branding';
 import { hasSupabaseConfig, supabase } from './lib/supabase';
 import { buildSliceTreemap } from './lib/treemap';
 import type { HoldingWithWeight } from './types';
@@ -253,7 +252,6 @@ function App() {
             return null;
           }
 
-          const showLogo = rect.width >= 7 && rect.height >= 9;
           const showSymbol = rect.width >= 10 && rect.height >= 7;
           const showPercent = rect.width >= 15 && rect.height >= 11;
 
@@ -271,19 +269,6 @@ function App() {
               }}
               title={`${holding.name} (${holding.symbol}) ${formatPercent(holding.weight)} | ${formatCurrency(holding.marketValueUsd, currency)}`}
             >
-              {showLogo ? (
-                <img
-                  src={holding.logoUrl}
-                  alt={`${holding.name} logo`}
-                  className="logo"
-                  loading="lazy"
-                  onError={(event) => {
-                    const target = event.currentTarget;
-                    target.onerror = null;
-                    target.src = getFallbackLogoUrl(holding.symbol);
-                  }}
-                />
-              ) : null}
               <div className="tile-labels">
                 {showSymbol ? <span className="symbol">{holding.symbol}</span> : null}
                 {showPercent ? <span>{formatPercent(holding.weight)}</span> : null}
