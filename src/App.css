@@ -146,6 +146,10 @@ button {
   transition: transform 140ms ease, filter 140ms ease;
 }
 
+.tile-hero {
+  padding: clamp(0.6rem, 1.8vw, 1.1rem);
+}
+
 .tile::after {
   content: '';
   position: absolute;
@@ -163,23 +167,28 @@ button {
 
 .logo-badge {
   width: fit-content;
-  max-width: 64px;
-  padding: 5px;
+  max-width: 92px;
+  padding: 7px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.14);
+  background: color-mix(in srgb, currentColor 14%, transparent);
   border: 1px solid rgba(255, 255, 255, 0.32);
   backdrop-filter: blur(3px);
   z-index: 1;
 }
 
+.logo-badge-hero {
+  max-width: 132px;
+  padding: 10px;
+}
+
 .logo {
-  width: clamp(26px, 20%, 52px);
+  width: clamp(34px, 24%, 78px);
   aspect-ratio: 1;
   object-fit: contain;
   display: block;
   border-radius: 6px;
-  mix-blend-mode: screen;
-  opacity: 0.96;
+  mix-blend-mode: luminosity;
+  opacity: 0.98;
 }
 
 .tile-labels {
@@ -193,12 +202,49 @@ button {
   min-width: 0;
 }
 
+.tile-labels.no-symbol {
+  justify-content: flex-end;
+}
+
 .symbol {
   font-weight: 700;
   letter-spacing: 0.02em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.other-breakdown {
+  border: 1px solid #cbd5e1;
+  background: rgba(255, 255, 255, 0.82);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+}
+
+.other-breakdown h2 {
+  margin: 0 0 0.6rem;
+}
+
+.other-breakdown summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.other-breakdown ul {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.other-breakdown li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.7rem;
+  font-size: 0.92rem;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 0.35rem;
 }
 
 .table-wrapper {

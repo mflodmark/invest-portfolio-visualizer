@@ -20,6 +20,9 @@ const CATEGORY_COLORS: Record<NonNullable<HoldingWithWeight['category']>, string
   bond: '#7c3aed',
 };
 
+const MAX_VISIBLE_TILES = 12;
+const MIN_VISIBLE_WEIGHT = 0.012;
+
 function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(hasSupabaseConfig);
@@ -78,9 +81,10 @@ function App() {
     );
   }, [session?.user?.id]);
 
+  const treemapData = useMemo(() => buildTreemapData(holdings), [holdings]);
   const layout = useMemo(
-    () => buildSliceTreemap(holdings.map((item) => item.weight), { x: 0, y: 0, width: 100, height: 100 }),
-    [holdings],
+    () => buildSliceTreemap(treemapData.tiles.map((item) => item.weight), { x: 0, y: 0, width: 100, height: 100 }),
+    [treemapData.tiles],
   );
 
   const total = useMemo(() => holdings.reduce((sum, item) => sum + item.marketValueUsd, 0), [holdings]);
@@ -243,19 +247,21 @@ function App() {
       ) : null}
 
       <section className="treemap" aria-label="Portfolio holding treemap">
-        {holdings.map((holding, index) => {
+        {treemapData.tiles.map((holding, index) => {
           const rect = layout[index];
           if (!rect) {
             return null;
           }
 
-          const showLogo = rect.width >= 8 && rect.height >= 11;
+          const showLogo = rect.width >= 8 && rect.height >= 10;
           const showSymbol = rect.width >= 11 && rect.height >= 8;
           const showPercent = rect.width >= 17 && rect.height >= 12;
+          const isHero = rect.width >= 24 && rect.height >= 16;
+          const labelsClassName = showSymbol ? 'tile-labels' : 'tile-labels no-symbol';
 
           return (
             <article
-              className="tile"
+              className={isHero ? 'tile tile-hero' : 'tile'}
               key={holding.symbol}
               style={{
                 left: `${rect.x}%`,
@@ -268,7 +274,7 @@ function App() {
               title={`${holding.name} (${holding.symbol}) ${formatPercent(holding.weight)} | ${formatCurrency(holding.marketValueUsd, currency)}`}
             >
               {showLogo ? (
-                <div className="logo-badge">
+                <div className={isHero ? 'logo-badge logo-badge-hero' : 'logo-badge'}>
                   <img
                     src={holding.logoUrl}
                     alt={`${holding.name} logo`}
@@ -282,14 +288,35 @@ function App() {
                   />
                 </div>
               ) : null}
-              <div className="tile-labels">
-                {showSymbol ? <span className="symbol">{holding.symbol}</span> : <span />}
+              <div className={labelsClassName}>
+                {showSymbol ? <span className="symbol">{holding.symbol}</span> : null}
                 {showPercent ? <span>{formatPercent(holding.weight)}</span> : null}
               </div>
             </article>
           );
         })}
       </section>
+
+      {treemapData.otherConstituents.length > 0 ? (
+        <section className="other-breakdown">
+          <h2>Other Holdings</h2>
+          <details open>
+            <summary>
+              {treemapData.otherConstituents.length} positions grouped into OTHER (
+              {formatPercent(treemapData.otherWeight)})
+            </summary>
+            <ul>
+              {treemapData.otherConstituents.map((holding) => (
+                <li key={`other-${holding.symbol}`}>
+                  <span>{holding.symbol}</span>
+                  <span>{formatPercent(holding.weight)}</span>
+                  <span>{formatCurrency(holding.marketValueUsd, currency)}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        </section>
+      ) : null}
 
       <section className="table-wrapper">
         <h2>Holdings</h2>
@@ -551,6 +578,49 @@ function formatCurrency(value: number, currencyCode: string): string {
 
 function formatPercent(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
+}
+
+function buildTreemapData(holdings: HoldingWithWeight[]): {
+  tiles: HoldingWithWeight[];
+  otherConstituents: HoldingWithWeight[];
+  otherWeight: number;
+} {
+  if (holdings.length <= MAX_VISIBLE_TILES) {
+    return { tiles: holdings, otherConstituents: [], otherWeight: 0 };
+  }
+
+  const primary = holdings.filter(
+    (holding, index) => index < MAX_VISIBLE_TILES && holding.weight >= MIN_VISIBLE_WEIGHT,
+  );
+  const otherConstituents = holdings.filter(
+    (holding, index) => !(index < MAX_VISIBLE_TILES && holding.weight >= MIN_VISIBLE_WEIGHT),
+  );
+
+  if (otherConstituents.length === 0) {
+    return { tiles: holdings, otherConstituents: [], otherWeight: 0 };
+  }
+
+  const safePrimary = primary.length === 0 ? [holdings[0]] : primary;
+  const normalizedOther = holdings.filter((holding) => !safePrimary.some((main) => main.symbol === holding.symbol));
+  const otherWeight = normalizedOther.reduce((sum, item) => sum + item.weight, 0);
+  const otherMarketValue = normalizedOther.reduce((sum, item) => sum + item.marketValueUsd, 0);
+
+  const otherTile: HoldingWithWeight = {
+    symbol: 'OTHER',
+    name: `Other (${normalizedOther.length})`,
+    logoUrl: '/logos/OTHER.svg',
+    marketValueUsd: otherMarketValue,
+    category: 'stock',
+    brandColor: '#1f2937',
+    textColor: '#f8fafc',
+    weight: otherWeight,
+  };
+
+  return {
+    tiles: [...safePrimary, otherTile].sort((a, b) => b.weight - a.weight),
+    otherConstituents: normalizedOther,
+    otherWeight,
+  };
 }
 
 export default App;
