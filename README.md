@@ -1,45 +1,41 @@
 # Invest Portfolio Visualizer
 
-TypeScript + React app that visualizes portfolio concentration with a logo treemap.
+TypeScript + React app that visualizes portfolio concentration with branded logo tiles.
 
-## Why this visualization
+## Features
 
-- Treemap makes relative position sizing obvious.
-- Each tile scales with holding weight.
-- Logos improve at-a-glance recognition.
+- Treemap sized by each holding's portfolio weight
+- Brand-first tiles (logo + color + contrast text)
+- Supabase login (email/password + Google OAuth)
+- Per-user cloud portfolio storage in Postgres (RLS protected)
+- CSV import for Avanza-style exports
 
-## Run
+## Local run
 
 ```bash
 npm install
+cp .env.example .env
+# add your Supabase URL + anon key
 npm run dev
 ```
 
-## Data model
+If `.env` is missing, the app runs with demo data and no login.
 
-The app loads `public/portfolio.json` and computes weights from `marketValueUsd`.
+## Supabase setup
 
-```ts
-{
-  symbol: string;
-  name: string;
-  logoUrl: string;
-  marketValueUsd: number;
-  category: 'stock' | 'etf' | 'crypto' | 'cash' | 'bond';
-}
+1. Create a Supabase project.
+2. In Supabase SQL editor, run: `supabase/schema.sql`.
+3. In Supabase Auth providers, enable Email and optionally Google.
+4. Add values to `.env`:
+
+```bash
+VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
 ```
 
-## Production data options
+## CSV import contract
 
-1. Brokerage CSV export -> server parser -> `/api/portfolio`
-2. Google Sheet + scheduled sync -> `/api/portfolio`
-3. Brokerage API provider (if available) -> `/api/portfolio`
-
-Keep frontend unchanged by returning normalized holdings in that endpoint.
-
-## CSV import (broker export)
-
-Use the "Import broker CSV" button in the app and select your exported file.
+Use the "Import broker CSV" button and select your exported file.
 
 Required columns:
 
@@ -50,4 +46,17 @@ Required columns:
 - `Valuta`
 - `Värde`
 
-The importer maps those rows to holdings and computes relative weights automatically.
+The importer parses values, applies logo/brand-color defaults per symbol, computes weights, and saves to your Supabase portfolio when signed in.
+
+## Database tables
+
+- `portfolios`: user-owned portfolio container
+- `holdings`: normalized current positions with market value and brand presentation fields
+
+RLS policies ensure each user can access only their own rows.
+
+## Branding notes
+
+Brand defaults live in `src/lib/branding.ts`.
+
+This is where you should maintain canonical logo URLs and tile colors per symbol for visual consistency.

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getPortfolio, parseBrokerCsv } from './lib/portfolio';
+import type { Session } from '@supabase/supabase-js';
+import { getDemoPortfolio, getPortfolioFromDatabase, parseBrokerCsv, saveBrokerCsvToDatabase } from './lib/portfolio';
+import { hasSupabaseConfig, supabase } from './lib/supabase';
 import { buildSliceTreemap } from './lib/treemap';
 import type { HoldingWithWeight } from './types';
 
-const CATEGORY_COLORS: Record<HoldingWithWeight['category'], string> = {
+const CATEGORY_COLORS: Record<NonNullable<HoldingWithWeight['category']>, string> = {
   stock: '#0d9488',
   etf: '#f97316',
   crypto: '#2563eb',
@@ -12,16 +14,60 @@ const CATEGORY_COLORS: Record<HoldingWithWeight['category'], string> = {
 };
 
 function App() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState<boolean>(hasSupabaseConfig);
   const [holdings, setHoldings] = useState<HoldingWithWeight[]>([]);
+  const [isLoadingHoldings, setIsLoadingHoldings] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [currency, setCurrency] = useState<string>('USD');
   const [sourceLabel, setSourceLabel] = useState<string>('Demo data');
 
   useEffect(() => {
-    getPortfolio()
-      .then(setHoldings)
-      .catch((err: Error) => setError(err.message));
+    if (!hasSupabaseConfig || !supabase) {
+      void loadDemoData(setHoldings, setCurrency, setSourceLabel, setError, setIsLoadingHoldings);
+      setAuthLoading(false);
+      return;
+    }
+
+    void supabase.auth.getSession().then(({ data, error: sessionError }) => {
+      if (sessionError) {
+        setError(sessionError.message);
+      }
+      setSession(data.session);
+      setAuthLoading(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
+
+  useEffect(() => {
+    if (!hasSupabaseConfig || !supabase) {
+      return;
+    }
+
+    if (!session?.user?.id) {
+      setHoldings([]);
+      setSourceLabel('No portfolio loaded');
+      return;
+    }
+
+    void loadDatabaseData(
+      session.user.id,
+      setHoldings,
+      setCurrency,
+      setSourceLabel,
+      setError,
+      setIsLoadingHoldings,
+    );
+  }, [session?.user?.id]);
 
   const layout = useMemo(
     () => buildSliceTreemap(holdings.map((item) => item.weight), { x: 0, y: 0, width: 100, height: 100 }),
@@ -29,6 +75,14 @@ function App() {
   );
 
   const total = useMemo(() => holdings.reduce((sum, item) => sum + item.marketValueUsd, 0), [holdings]);
+
+  if (authLoading) {
+    return <main className="page"><p>Loading authentication...</p></main>;
+  }
+
+  if (hasSupabaseConfig && !session) {
+    return <AuthGate />;
+  }
 
   return (
     <main className="page">
@@ -51,13 +105,33 @@ function App() {
             if (!file) {
               return;
             }
-            void importCsv(file, setHoldings, setCurrency, setSourceLabel, setError);
+            void importCsv(
+              file,
+              session?.user?.id,
+              setHoldings,
+              setCurrency,
+              setSourceLabel,
+              setError,
+              setIsLoadingHoldings,
+            );
           }}
         />
         <span className="source">{sourceLabel}</span>
+        {hasSupabaseConfig && supabase ? (
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => {
+              void supabase?.auth.signOut();
+            }}
+          >
+            Sign out
+          </button>
+        ) : null}
       </section>
 
       {error ? <p className="error">{error}</p> : null}
+      {isLoadingHoldings ? <p>Loading holdings...</p> : null}
 
       <section className="treemap" aria-label="Portfolio holding treemap">
         {holdings.map((holding, index) => {
@@ -77,7 +151,8 @@ function App() {
                 top: `${rect.y}%`,
                 width: `${rect.width}%`,
                 height: `${rect.height}%`,
-                backgroundColor: CATEGORY_COLORS[holding.category],
+                backgroundColor: holding.brandColor || CATEGORY_COLORS[holding.category],
+                color: holding.textColor || '#f8fafc',
               }}
               title={`${holding.name} (${holding.symbol}) ${formatPercent(holding.weight)} | ${formatCurrency(holding.marketValueUsd, currency)}`}
             >
@@ -120,15 +195,129 @@ function App() {
   );
 }
 
-async function importCsv(
-  file: File,
+function AuthGate() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [message, setMessage] = useState('');
+
+  if (!supabase) {
+    return (
+      <main className="page auth-card">
+        <p>Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to use login and cloud storage.</p>
+      </main>
+    );
+  }
+
+  return (
+    <main className="page auth-card">
+      <h1>Sign in</h1>
+      <p>Use your account to store holdings and branded tiles securely.</p>
+      <label htmlFor="email-input">Email</label>
+      <input id="email-input" type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+      <label htmlFor="password-input">Password</label>
+      <input
+        id="password-input"
+        type="password"
+        value={password}
+        onChange={(event) => setPassword(event.target.value)}
+      />
+      <div className="auth-buttons">
+        <button
+          type="button"
+          onClick={() => {
+            void signInWithPassword(email, password, setMessage);
+          }}
+        >
+          Sign in
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            void signUpWithPassword(email, password, setMessage);
+          }}
+        >
+          Create account
+        </button>
+        <button
+          type="button"
+          className="ghost-button"
+          onClick={() => {
+            void supabase?.auth.signInWithOAuth({ provider: 'google' });
+          }}
+        >
+          Continue with Google
+        </button>
+      </div>
+      {message ? <p className="error">{message}</p> : null}
+    </main>
+  );
+}
+
+async function loadDemoData(
   setHoldings: (holdings: HoldingWithWeight[]) => void,
   setCurrency: (currency: string) => void,
   setSourceLabel: (source: string) => void,
   setError: (message: string) => void,
+  setIsLoadingHoldings: (value: boolean) => void,
 ): Promise<void> {
   try {
+    setIsLoadingHoldings(true);
+    const demo = await getDemoPortfolio();
+    setHoldings(demo);
+    setCurrency('USD');
+    setSourceLabel('Demo data (no Supabase configured)');
+    setError('');
+  } catch (error) {
+    setError(error instanceof Error ? error.message : 'Failed to load demo data.');
+  } finally {
+    setIsLoadingHoldings(false);
+  }
+}
+
+async function loadDatabaseData(
+  userId: string,
+  setHoldings: (holdings: HoldingWithWeight[]) => void,
+  setCurrency: (currency: string) => void,
+  setSourceLabel: (source: string) => void,
+  setError: (message: string) => void,
+  setIsLoadingHoldings: (value: boolean) => void,
+): Promise<void> {
+  try {
+    setIsLoadingHoldings(true);
+    const { holdings, currency } = await getPortfolioFromDatabase(userId);
+    setHoldings(holdings);
+    setCurrency(currency);
+    setSourceLabel('Supabase portfolio');
+    setError('');
+  } catch (error) {
+    setError(error instanceof Error ? error.message : 'Failed to load database holdings.');
+  } finally {
+    setIsLoadingHoldings(false);
+  }
+}
+
+async function importCsv(
+  file: File,
+  userId: string | undefined,
+  setHoldings: (holdings: HoldingWithWeight[]) => void,
+  setCurrency: (currency: string) => void,
+  setSourceLabel: (source: string) => void,
+  setError: (message: string) => void,
+  setIsLoadingHoldings: (value: boolean) => void,
+): Promise<void> {
+  try {
+    setIsLoadingHoldings(true);
     const csvText = await file.text();
+
+    if (userId) {
+      const { holdings, currency } = await saveBrokerCsvToDatabase(userId, csvText);
+      setHoldings(holdings);
+      setCurrency(currency);
+      setSourceLabel(`${file.name} (saved)`);
+      setError('');
+      return;
+    }
+
     const { holdings, currency } = parseBrokerCsv(csvText);
     if (holdings.length === 0) {
       throw new Error('No holdings found in CSV.');
@@ -136,11 +325,44 @@ async function importCsv(
 
     setHoldings(holdings);
     setCurrency(currency);
-    setSourceLabel(file.name);
+    setSourceLabel(`${file.name} (local only)`);
     setError('');
   } catch (error) {
     setError(error instanceof Error ? error.message : 'CSV import failed.');
+  } finally {
+    setIsLoadingHoldings(false);
   }
+}
+
+async function signInWithPassword(
+  email: string,
+  password: string,
+  setMessage: (message: string) => void,
+): Promise<void> {
+  if (!supabase) {
+    return;
+  }
+
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  setMessage(error ? error.message : 'Signed in.');
+}
+
+async function signUpWithPassword(
+  email: string,
+  password: string,
+  setMessage: (message: string) => void,
+): Promise<void> {
+  if (!supabase) {
+    return;
+  }
+
+  const { error } = await supabase.auth.signUp({ email, password });
+  if (error) {
+    setMessage(error.message);
+    return;
+  }
+
+  setMessage('Account created. Check your email for a confirmation link.');
 }
 
 function formatCurrency(value: number, currencyCode: string): string {

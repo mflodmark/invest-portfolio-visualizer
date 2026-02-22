@@ -1,14 +1,8 @@
+import { getBranding } from './branding';
+import { supabase } from './supabase';
 import type { Holding, HoldingWithWeight } from '../types';
 
-export async function getPortfolio(): Promise<HoldingWithWeight[]> {
-  const response = await fetch('/portfolio.json');
-  if (!response.ok) {
-    throw new Error('Unable to load portfolio data.');
-  }
-
-  const holdings = (await response.json()) as Holding[];
-  return normalizeHoldings(holdings);
-}
+const DEFAULT_PORTFOLIO_NAME = 'Main Portfolio';
 
 type BrokerCsvRow = {
   Namn: string;
@@ -18,6 +12,111 @@ type BrokerCsvRow = {
   Valuta: string;
   ['Värde']: string;
 };
+
+type DbHoldingRow = {
+  symbol: string;
+  name: string;
+  logo_url: string | null;
+  market_value: number;
+  category: Holding['category'];
+  brand_color: string | null;
+  text_color: string | null;
+  currency: string | null;
+};
+
+export async function getDemoPortfolio(): Promise<HoldingWithWeight[]> {
+  const response = await fetch('/portfolio.json');
+  if (!response.ok) {
+    throw new Error('Unable to load demo portfolio data.');
+  }
+
+  const holdings = (await response.json()) as Holding[];
+  return normalizeHoldings(holdings);
+}
+
+export async function getPortfolioFromDatabase(userId: string): Promise<{
+  holdings: HoldingWithWeight[];
+  currency: string;
+}> {
+  const portfolioId = await getOrCreateDefaultPortfolio(userId);
+  if (!supabase) {
+    throw new Error('Supabase client is not configured.');
+  }
+
+  const { data, error } = await supabase
+    .from('holdings')
+    .select('symbol,name,logo_url,market_value,category,brand_color,text_color,currency')
+    .eq('portfolio_id', portfolioId)
+    .order('market_value', { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const rows = (data || []) as DbHoldingRow[];
+  const holdings = normalizeHoldings(
+    rows.map((row) => ({
+      symbol: row.symbol,
+      name: row.name,
+      logoUrl: row.logo_url || getBranding(row.symbol).logoUrl,
+      marketValueUsd: Number(row.market_value),
+      category: row.category,
+      brandColor: row.brand_color || getBranding(row.symbol).brandColor,
+      textColor: row.text_color || getBranding(row.symbol).textColor,
+      currency: row.currency || 'SEK',
+    })),
+  );
+
+  const currency = rows[0]?.currency || 'SEK';
+  return { holdings, currency };
+}
+
+export async function saveBrokerCsvToDatabase(userId: string, csvText: string): Promise<{
+  holdings: HoldingWithWeight[];
+  currency: string;
+}> {
+  if (!supabase) {
+    throw new Error('Supabase client is not configured.');
+  }
+
+  const { holdings, currency } = parseBrokerCsv(csvText);
+  const portfolioId = await getOrCreateDefaultPortfolio(userId);
+
+  const { error: deleteError } = await supabase.from('holdings').delete().eq('portfolio_id', portfolioId);
+  if (deleteError) {
+    throw new Error(deleteError.message);
+  }
+
+  if (holdings.length > 0) {
+    const payload = holdings.map((holding) => ({
+      portfolio_id: portfolioId,
+      symbol: holding.symbol,
+      name: holding.name,
+      market_value: holding.marketValueUsd,
+      category: holding.category,
+      currency,
+      logo_url: holding.logoUrl,
+      brand_color: holding.brandColor || null,
+      text_color: holding.textColor || null,
+    }));
+
+    const { error: insertError } = await supabase.from('holdings').insert(payload);
+    if (insertError) {
+      throw new Error(insertError.message);
+    }
+  }
+
+  const { error: portfolioError } = await supabase
+    .from('portfolios')
+    .update({ base_currency: currency })
+    .eq('id', portfolioId);
+
+  if (portfolioError) {
+    throw new Error(portfolioError.message);
+  }
+
+  return { holdings, currency };
+}
 
 export function parseBrokerCsv(csvText: string): {
   holdings: HoldingWithWeight[];
@@ -49,17 +148,54 @@ export function parseBrokerCsv(csvText: string): {
   const holdings = rows.map((row) => {
     const marketValueUsd = parseNumericValue(row['Värde']);
     const symbol = sanitizeSymbol(row.Ticker || row.Namn);
+    const branding = getBranding(symbol);
     return {
       symbol,
       name: row.Namn,
-      logoUrl: getLogoUrl(symbol),
+      logoUrl: branding.logoUrl,
       marketValueUsd,
-      category: inferCategory(row.Typ, row.Namn),
+      category: branding.category || inferCategory(row.Typ, row.Namn),
+      brandColor: branding.brandColor,
+      textColor: branding.textColor,
+      currency: row.Valuta || 'SEK',
     } satisfies Holding;
   });
 
   const currency = rows[0]?.Valuta?.trim() || 'SEK';
   return { holdings: normalizeHoldings(holdings), currency };
+}
+
+async function getOrCreateDefaultPortfolio(userId: string): Promise<string> {
+  if (!supabase) {
+    throw new Error('Supabase client is not configured.');
+  }
+
+  const { data: existing, error: selectError } = await supabase
+    .from('portfolios')
+    .select('id')
+    .eq('user_id', userId)
+    .limit(1)
+    .maybeSingle();
+
+  if (selectError) {
+    throw new Error(selectError.message);
+  }
+
+  if (existing?.id) {
+    return existing.id;
+  }
+
+  const { data: created, error: createError } = await supabase
+    .from('portfolios')
+    .insert({ user_id: userId, name: DEFAULT_PORTFOLIO_NAME, base_currency: 'SEK' })
+    .select('id')
+    .single();
+
+  if (createError || !created?.id) {
+    throw new Error(createError?.message || 'Failed to create portfolio.');
+  }
+
+  return created.id;
 }
 
 function normalizeHoldings(holdings: Holding[]): HoldingWithWeight[] {
@@ -126,7 +262,7 @@ function sanitizeSymbol(value: string): string {
 function inferCategory(rawType: string, rawName: string): Holding['category'] {
   const type = rawType.toLowerCase();
   const name = rawName.toLowerCase();
-  if (type.includes('etf') || name.includes('etf')) {
+  if (type.includes('etf') || name.includes('etf') || type.includes('fond')) {
     return 'etf';
   }
   if (name.includes('bitcoin') || name.includes('ethereum') || name.includes('crypto')) {
@@ -139,8 +275,4 @@ function inferCategory(rawType: string, rawName: string): Holding['category'] {
     return 'bond';
   }
   return 'stock';
-}
-
-function getLogoUrl(symbol: string): string {
-  return `https://placehold.co/80x80/0f172a/f8fafc?text=${encodeURIComponent(symbol)}`;
 }

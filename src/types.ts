@@ -4,6 +4,9 @@ export type Holding = {
   logoUrl: string;
   marketValueUsd: number;
   category: 'stock' | 'etf' | 'crypto' | 'cash' | 'bond';
+  brandColor?: string;
+  textColor?: string;
+  currency?: string;
 };
 
 export type HoldingWithWeight = Holding & {
