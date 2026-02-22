@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getPortfolio } from './lib/portfolio';
+import { getPortfolio, parseBrokerCsv } from './lib/portfolio';
 import { buildSliceTreemap } from './lib/treemap';
 import type { HoldingWithWeight } from './types';
 
@@ -14,6 +14,8 @@ const CATEGORY_COLORS: Record<HoldingWithWeight['category'], string> = {
 function App() {
   const [holdings, setHoldings] = useState<HoldingWithWeight[]>([]);
   const [error, setError] = useState<string>('');
+  const [currency, setCurrency] = useState<string>('USD');
+  const [sourceLabel, setSourceLabel] = useState<string>('Demo data');
 
   useEffect(() => {
     getPortfolio()
@@ -34,6 +36,26 @@ function App() {
         <h1>Portfolio Visualizer</h1>
         <p>Treemap view sized by each investment&apos;s share of your total portfolio.</p>
       </header>
+
+      <section className="controls">
+        <label htmlFor="csv-file" className="file-input-label">
+          Import broker CSV
+        </label>
+        <input
+          id="csv-file"
+          type="file"
+          accept=".csv,text/csv"
+          className="file-input"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (!file) {
+              return;
+            }
+            void importCsv(file, setHoldings, setCurrency, setSourceLabel, setError);
+          }}
+        />
+        <span className="source">{sourceLabel}</span>
+      </section>
 
       {error ? <p className="error">{error}</p> : null}
 
@@ -57,7 +79,7 @@ function App() {
                 height: `${rect.height}%`,
                 backgroundColor: CATEGORY_COLORS[holding.category],
               }}
-              title={`${holding.name} (${holding.symbol}) ${formatPercent(holding.weight)} | ${formatCurrency(holding.marketValueUsd)}`}
+              title={`${holding.name} (${holding.symbol}) ${formatPercent(holding.weight)} | ${formatCurrency(holding.marketValueUsd, currency)}`}
             >
               <img src={holding.logoUrl} alt={`${holding.name} logo`} className="logo" loading="lazy" />
               <div className="tile-labels">
@@ -84,7 +106,7 @@ function App() {
             {holdings.map((holding) => (
               <tr key={holding.symbol}>
                 <td>{holding.name}</td>
-                <td>{formatCurrency(holding.marketValueUsd)}</td>
+                <td>{formatCurrency(holding.marketValueUsd, currency)}</td>
                 <td>{formatPercent(holding.weight)}</td>
                 <td>{holding.category}</td>
               </tr>
@@ -93,15 +115,38 @@ function App() {
         </table>
       </section>
 
-      <footer className="footer">Total portfolio value: {formatCurrency(total)}</footer>
+      <footer className="footer">Total portfolio value: {formatCurrency(total, currency)}</footer>
     </main>
   );
 }
 
-function formatCurrency(value: number): string {
+async function importCsv(
+  file: File,
+  setHoldings: (holdings: HoldingWithWeight[]) => void,
+  setCurrency: (currency: string) => void,
+  setSourceLabel: (source: string) => void,
+  setError: (message: string) => void,
+): Promise<void> {
+  try {
+    const csvText = await file.text();
+    const { holdings, currency } = parseBrokerCsv(csvText);
+    if (holdings.length === 0) {
+      throw new Error('No holdings found in CSV.');
+    }
+
+    setHoldings(holdings);
+    setCurrency(currency);
+    setSourceLabel(file.name);
+    setError('');
+  } catch (error) {
+    setError(error instanceof Error ? error.message : 'CSV import failed.');
+  }
+}
+
+function formatCurrency(value: number, currencyCode: string): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'USD',
+    currency: currencyCode || 'USD',
     maximumFractionDigits: 0,
   }).format(value);
 }

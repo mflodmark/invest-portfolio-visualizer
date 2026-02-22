@@ -36,3 +36,18 @@ The app loads `public/portfolio.json` and computes weights from `marketValueUsd`
 3. Brokerage API provider (if available) -> `/api/portfolio`
 
 Keep frontend unchanged by returning normalized holdings in that endpoint.
+
+## CSV import (broker export)
+
+Use the "Import broker CSV" button in the app and select your exported file.
+
+Required columns:
+
+- `Namn`
+- `Ticker`
+- `Typ`
+- `Marknad`
+- `Valuta`
+- `Värde`
+
+The importer maps those rows to holdings and computes relative weights automatically.
